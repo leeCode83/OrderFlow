@@ -18,7 +18,7 @@ export class AuthService {
                 expiresIn: expiresIn
             });
         } catch (error) {
-            console.log(error);
+            throw error;
         }
     }
 
@@ -44,7 +44,7 @@ export class AuthService {
 
             return this.generateToken({ id: newUser.id, name: newUser.name, role: newUser.role });
         } catch (error) {
-            console.log(error);
+            throw error;
         }
     }
 
@@ -66,7 +66,7 @@ export class AuthService {
 
             return this.generateToken({ id: existedUser.id, name: existedUser.name, role: existedUser.role });
         } catch (error) {
-            console.log(error)
+            throw error;
         }
     }
 
