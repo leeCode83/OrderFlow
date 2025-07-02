@@ -1,12 +1,12 @@
 import { BadGatewayException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
-import { PrismaClient} from '@prisma/client'
+import { PrismaService } from 'src/prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt'
 
 @Injectable()
 export class AuthService {
-    constructor(private prisma: PrismaClient, private jwtService: JwtService, private configService: ConfigService){}
+    constructor(private prisma: PrismaService, private jwtService: JwtService, private configService: ConfigService){}
 
     private async generateToken(payload: {id: string; name: string; role: string}){
         try {
