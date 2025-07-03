@@ -13,6 +13,10 @@ export class OrdersController {
             customerName: string;
             customerEmail: string;
             totalAmount: Decimal;
+            items: {
+                productId: string;
+                quantity: number;
+            }[]
     }) {
             return await this.ordersService.createOrder(order);
         }

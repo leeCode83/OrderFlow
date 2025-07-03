@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from 'src/prisma/prisma.service';
 
@@ -6,16 +6,15 @@ import { PrismaService } from 'src/prisma/prisma.service';
 export class OrdersService {
     constructor(private prisma: PrismaService){}
 
-    // orderNumber   String      @unique @map("order_number")
-    // customerName  String      @map("customer_name")
-    // customerEmail String      @map("customer_email")
-    // totalAmount   Decimal     @db.Decimal(12, 2) @map("total_amount")
     async createOrder(
         order: { 
             orderNumber: string; 
             customerName: string; 
             customerEmail: string;
-            totalAmount: Decimal; 
+            items: {
+                productId: string;
+                quantity: number;
+            }[] 
         }){
             try {
                 const existedOrder = await this.prisma.order.findUnique({
@@ -28,17 +27,71 @@ export class OrdersService {
                     throw new BadRequestException(`This order already made in ${existedOrder.orderDate}`)
                 }
 
-                return await this.prisma.order.create({
-                    data: {
-                        orderNumber: order.orderNumber,
-                        customerName: order.customerName,
-                        customerEmail: order.customerEmail,
-                        totalAmount: order.totalAmount,
+                let totalAmountPrice = new Decimal(0)   //total harga order semuanya
+                const orderItemsToConnect: any[] = []   //array penyimpanan item order yang ada sekalian dibuat dalam transaksi
+                const productsUpdate: { productId: string; stockQuantity: number }[] = []   //array penyimpanan data utk update stock produk
+
+                const result = await this.prisma.$transaction(async (prisma) => {
+                    for(const item of order.items){
+                        const product = await prisma.product.findUnique({
+                            where: { id: item.productId }
+                        });
+
+                        if(!product){
+                            throw new NotFoundException(`Product with ID ${item.productId} not found. Please enter the right ID`);
+                        }
+
+                        if(product.stockQuantity < item.quantity){
+                            throw new BadRequestException(`Product's stock not enough for this transaction.`)
+                        }
+
+                        const pricePerUnit = new Decimal(product.price);
+                        totalAmountPrice = totalAmountPrice.plus(pricePerUnit.times(item.quantity));
+
+                        orderItemsToConnect.push({
+                            product: { connect: { id: item.productId } },
+                            quantity: item.quantity,
+                            pricePerUnit: pricePerUnit
+                        });
+
+                        productsUpdate.push({
+                            productId: item.productId,
+                            stockQuantity: product.stockQuantity - item.quantity
+                        });
                     }
+
+                    const newOrder = await prisma.order.create({
+                        data: {
+                            orderNumber: order.orderNumber,
+                            customerName: order.customerName,
+                            customerEmail: order.customerEmail,
+                            totalAmount: totalAmountPrice,
+                            items: { 
+                                create: orderItemsToConnect
+                            }
+                        },
+                        include: {
+                            items: {
+                                include: { product: true }
+                            }
+                        }
+                    });
+
+                    for(const update of productsUpdate){
+                        await prisma.product.update({
+                            where: { id: update.productId },
+                            data: {
+                                stockQuantity: update.stockQuantity
+                            }
+                        })
+                    }
+                    return newOrder;
                 })
 
+                return result;
             } catch (error) {
                 throw error;
             }
     }
+
 }
